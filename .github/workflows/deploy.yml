@@ -1,0 +1,41 @@
+name: Deploy Claim Frequency Model to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write   # required for OIDC — no static AWS keys stored anywhere
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Assume AWS role via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy via SSM (no SSH, no open port 22 required)
+        run: |
+          aws ssm send-command \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy insurance-claims-glm from GitHub Actions" \
+            --parameters '{"commands":[
+              "mkdir -p /home/ubuntu/insurance-claims-glm",
+              "cd /home/ubuntu/insurance-claims-glm",
+              "rm -rf *",
+              "git clone https://github.com/${{ github.repository }}.git .",
+              "docker stop claims-container || true",
+              "docker rm claims-container || true",
+              "docker build -t insurance-claim-api .",
+              "docker run -d --name claims-container -p 8000:8000 -e API_KEY=${{ secrets.API_KEY }} insurance-claim-api"
+            ]}' \
+            --output text
