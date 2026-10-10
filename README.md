@@ -70,13 +70,50 @@ Outputs: `outputs/results.csv` (deviance/MAE per model) and
 
 ## Findings
 
-*(Fill in after running — this is the actual write-up a reader cares about.)*
+Held-out 20% test split, seed 42. Claim frequency is ~0.10 per policy-year and
+95% of policies have no claim at all, so every gain below is small in absolute
+terms. Numbers are reproduced by `python findings.py`.
 
-- Which model wins on Poisson deviance, and by how much over the naive baseline
-- Whether XGBoost's improvement over the GLM is large enough to justify
-  losing interpretability, in a regulated pricing context
-- What the lift chart shows about risk separation, not just average accuracy
-- Any features that turned out more/less predictive than expected
+| Model | Poisson deviance | vs naive |
+|---|---|---|
+| Naive baseline | 0.3312 | — |
+| Poisson GLM | 0.3214 | -3.0% |
+| XGBoost (Poisson) | 0.3067 | -7.4% |
+
+1. **XGBoost captures about 2.5x the improvement the GLM does** over a single
+   flat claim rate. Both are well calibrated overall (predicted/actual claims
+   0.993 and 0.995), so the difference is in *who* is ranked as risky, not the
+   average.
+2. **The GLM fails at the top of the risk distribution.** In the highest-risk
+   decile, actual frequency is 0.365 claims per year; XGBoost predicts 0.338,
+   the GLM only 0.197 (about 46% too low). At the low end the GLM overprices
+   (0.058 predicted vs 0.043 actual). Actual frequency in the riskiest decile
+   is 8.5x the safest. A pricing team using the GLM would systematically
+   underprice the policies most likely to claim.
+3. **Spline terms on the numeric features only close about a quarter of the
+   gap** (deviance 0.3177 vs 0.3214 for the GLM and 0.3067 for XGBoost), so most
+   of XGBoost's edge is interactions and sharp non-linearities rather than
+   curved single-variable effects. A natural next step is a GLM with targeted
+   interactions, which would keep the interpretability.
+4. **Bonus-malus and vehicle age drive the model.** They account for 32% and
+   31% of XGBoost's total gain, then vehicle brand (11%) and driver age (8%).
+   Policies with BonusMalus above 100 claim at 0.376 per year against 0.080 at
+   the 50 floor, nearly 5x, and 57% of policies sit exactly at 50, so the
+   feature is heavily clustered.
+5. **Some features add almost nothing.** `Area` carries 0.3% of the gain and
+   `Density` 1.7%, consistent with area being a banded version of density.
+   Drivers under 25 claim at 0.19 per year versus 0.09–0.11 for every older
+   band, roughly double.
+
+Caveats: a single train/test split with no tuning of XGBoost, so the gaps
+would need cross-validation before being quoted as precise.
+
+**A bug worth knowing about.** The first run had XGBoost scoring *worse* than
+the naive baseline (deviance 0.52). Cause: when `base_margin` is used for
+exposure, XGBoost ignores `base_score` in training but adds it back at
+`predict()`. The auto-estimated value (~0.05) shrank every rate prediction
+about 20x. Fixed in `src/models.py` by setting `base_score=1.0`; `app.py`'s
+rate-times-exposure logic was already correct once that is fixed.
 
 ## Serving the model
 

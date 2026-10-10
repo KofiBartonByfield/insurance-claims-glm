@@ -50,6 +50,10 @@ def fit_xgboost_poisson(X_train, y_train, exposure_train, **kwargs):
         subsample=0.9,
         colsample_bytree=0.9,
         enable_categorical=True,
+        # base_score is ignored in training when base_margin is given, but IS added
+        # back at predict() time. Auto-estimated it shrinks every rate prediction
+        # ~20x; 1.0 (log = 0) makes predict() return the true rate.
+        base_score=1.0,
         random_state=42,
     )
     params.update(kwargs)
