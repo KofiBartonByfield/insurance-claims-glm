@@ -115,6 +115,15 @@ exposure, XGBoost ignores `base_score` in training but adds it back at
 about 20x. Fixed in `src/models.py` by setting `base_score=1.0`; `app.py`'s
 rate-times-exposure logic was already correct once that is fixed.
 
+## Tests
+
+```bash
+pip install pytest
+pytest
+```
+
+Offline tests on synthetic data (also run in CI by `.github/workflows/tests.yml`). They cover the baseline, feature capping, frozen categorical levels, the deviance metric, and a regression test that fails if XGBoost predictions come out on the wrong scale (the `base_score` bug above).
+
 ## Serving the model
 
 `main.py` now also saves the trained XGBoost model to
